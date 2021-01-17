@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "swf_mover"
+version = "0.1.0"
+description = "Translates shapes in SWF files so the whole thing's top-left corner is at (0, 0)."
+authors = ["Vebyast (vebyast@gmail.com)"]
+
+[tool.poetry.dependencies]
+python = ">=3.7,<3.9"
+
+[tool.poetry.dev-dependencies]
+black = "^20.8b1"
+flake8 = "^3.8.4"
+pytype = "^2020.11.23"
+isort = "^5.6.4"
+pre-commit = "^2.9.2"
+
+
+[tool.black]
+line_length=79
+
+[tool.isort]
+profile="google"
+skip_gitignore=true
+src_paths="advent_of_code_2020_py"
+color_output=true
+atomic=true
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
