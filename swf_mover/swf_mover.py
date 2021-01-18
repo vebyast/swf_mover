@@ -5,6 +5,7 @@ from os import path
 
 from absl import app
 from absl import flags
+from absl import logging
 from lxml import etree
 import sh
 
@@ -34,6 +35,17 @@ class Point(object):
 
 HUGE_POINT = Point(float("+inf"), float("+inf"))
 
+HEADER = ("Header",)
+ROOT_POS = HEADER + ("size", "Rectangle")
+TAGS = HEADER + ("tags",)
+DEFSHAPE = TAGS + ("DefineShape",)
+DEFSHAPE2 = TAGS + ("DefineShape2",)
+SHAPE_POS = ("bounds", "Rectangle")
+EDGES = ("shapes", "Shape", "edges")
+SHAPESETUP = ("ShapeSetup",)
+LINETO = ("LineTo",)
+CURVETO = ("CurveTo",)
+
 
 class MoveRootPositionVisitor(object):
     def __init__(self, dx, dy):
@@ -41,7 +53,7 @@ class MoveRootPositionVisitor(object):
         self.dy = dy
 
     def Visit(self, element, path=()):
-        if path == ("Header", "size", "Rectangle"):
+        if path == ROOT_POS:
             element.set("left", str(float(element.get("left")) + self.dx))
             element.set("right", str(float(element.get("right")) + self.dx))
             element.set("top", str(float(element.get("top")) + self.dy))
@@ -72,77 +84,29 @@ class GetTopLeftVisitor(object):
         self._current_pt = value
 
     def Visit(self, element, path=()):
-        if path == ("Header", "size", "Rectangle"):
+        if path == ROOT_POS:
             self.tree_origin = Point.FromElement(element, "left", "top")
             self.top_left = Point.min(self.top_left, self.tree_origin)
-        elif path == ("Header", "tags", "DefineShape", "bounds", "Rectangle"):
+        elif path == DEFSHAPE2 + SHAPE_POS:
             pt_rel_to_origin = Point.FromElement(element, "left", "top")
             self.shape_origin = pt_rel_to_origin + self.tree_origin
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape",
-            "shapes",
-            "Shape",
-            "edges",
-            "ShapeSetup",
-        ):
+        elif path == DEFSHAPE + EDGES + SHAPESETUP:
             pt_rel_to_shape = Point.FromElement(element)
             self.current_pt = pt_rel_to_shape + self.shape_origin
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape",
-            "shapes",
-            "Shape",
-            "edges",
-            "LineTo",
-        ):
+        elif path == DEFSHAPE + EDGES + LINETO:
             self.current_pt += Point.FromElement(element)
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape",
-            "shapes",
-            "Shape",
-            "edges",
-            "CurveTo",
-        ):
+        elif path == DEFSHAPE + EDGES + CURVETO:
             self.current_pt += Point.FromElement(element, "x2", "y2")
 
-        elif path == ("Header", "tags", "DefineShape2", "bounds", "Rectangle"):
+        elif path == DEFSHAPE2 + SHAPE_POS:
             pt_rel_to_origin = Point.FromElement(element, "left", "top")
             self.shape_origin = pt_rel_to_origin + self.tree_origin
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape2",
-            "shapes",
-            "Shape",
-            "edges",
-            "ShapeSetup",
-        ):
+        elif path == DEFSHAPE + EDGES + SHAPESETUP:
             pt_rel_to_shape = Point.FromElement(element)
             self.current_pt = pt_rel_to_shape + self.shape_origin
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape2",
-            "shapes",
-            "Shape",
-            "edges",
-            "LineTo",
-        ):
+        elif path == DEFSHAPE + EDGES + LINETO:
             self.current_pt += Point.FromElement(element)
-        elif path == (
-            "Header",
-            "tags",
-            "DefineShape2",
-            "shapes",
-            "Shape",
-            "edges",
-            "CurveTo",
-        ):
+        elif path == DEFSHAPE + EDGES + CURVETO:
             self.current_pt += Point.FromElement(element, "x2", "y2")
 
         else:
@@ -154,27 +118,31 @@ def main(argv):
     del argv  # Unused.
 
     # Decompile SWF
-    xml_path = path.splitext(_SWF.value)[0] + ".xml"
-    SWFMILL.swf2xml(_SWF.value, xml_path)
+    swf_in_path = _SWF.value
+    xml_in_path = path.splitext(_SWF.value)[0] + ".xml"
+    SWFMILL.swf2xml(swf_in_path, xml_in_path)
 
     # Load XML
-    with open(xml_path, "rb") as xml_file:
-        xml = etree.parse(xml_file)
+    with open(xml_in_path, "rb") as xml_in_file:
+        xml = etree.parse(xml_in_file)
 
     # Find top-left corner
     top_left_visitor = GetTopLeftVisitor()
     top_left_visitor.Visit(xml.getroot())
+    logging.info(f"top_left: {top_left_visitor.top_left}")
 
     # Update root position to place everything in positive x, y
     move_visitor = MoveRootPositionVisitor(
-        -top_left_visitor.top_left.x, -top_left_visitor.top_left.y
+        top_left_visitor.top_left.x, top_left_visitor.top_left.y
     )
     move_visitor.Visit(xml.getroot())
 
     # Recompile SWF
-    with open(xml_path, "wb") as xml_file:
-        xml.write(xml_file)
-    SWFMILL.xml2swf(xml_path, _SWF.value)
+    xml_out_path = path.splitext(_SWF.value)[0] + ".moved.xml"
+    with open(xml_out_path, "wb") as xml_out_file:
+        xml.write(xml_out_file)
+    swf_out_path = path.splitext(_SWF.value)[0] + ".moved.swf"
+    SWFMILL.xml2swf(xml_out_path, swf_out_path)
 
 
 if __name__ == "__main__":
