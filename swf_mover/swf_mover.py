@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import dataclasses
-from os import path
+import tempfile
 
 from absl import app
 from absl import flags
@@ -150,14 +150,11 @@ class GetBoundsVisitor(object):
 def main(argv):
     del argv  # Unused.
 
-    # Decompile SWF
-    swf_in_path = _SWF.value
-    xml_in_path = path.splitext(_SWF.value)[0] + ".xml"
-    SWFMILL.swf2xml(swf_in_path, xml_in_path)
-
-    # Load XML
-    with open(xml_in_path, "rb") as xml_in_file:
-        xml = etree.parse(xml_in_file)
+    # Decompile SWF and load resulting XML
+    with tempfile.NamedTemporaryFile() as tmp_in:
+        SWFMILL.swf2xml(_SWF.value, tmp_in.name)
+        with open(tmp_in.name, "rb") as xml_in_file:
+            xml = etree.parse(xml_in_file)
 
     # Find top-left corner
     bounds_visitor = GetBoundsVisitor()
@@ -170,12 +167,11 @@ def main(argv):
     move_visitor = MoveRootPositionVisitor(movement)
     move_visitor.Visit(xml.getroot())
 
-    # Recompile SWF
-    xml_out_path = path.splitext(_SWF.value)[0] + ".moved.xml"
-    with open(xml_out_path, "wb") as xml_out_file:
-        xml.write(xml_out_file)
-    swf_out_path = path.splitext(_SWF.value)[0] + ".moved.swf"
-    SWFMILL.xml2swf(xml_out_path, swf_out_path)
+    # Write modified XML and recompile SWF from it
+    with tempfile.NamedTemporaryFile() as tmp_out:
+        with open(tmp_out.name, "wb") as xml_out_file:
+            xml.write(xml_out_file)
+        SWFMILL.xml2swf(tmp_out.name, _SWF.value)
 
 
 if __name__ == "__main__":
